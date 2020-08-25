@@ -12,7 +12,11 @@ class TestSearch(unittest.TestCase):
     def test_bad_request(self):
         r = search(None)
         self.assertEqual(r.status_code, 400, "A bad request should result in a 400")
-
+    
+    def test_bad_request_empty_spaces(self):
+        r = search('  ')
+        self.assertEqual(r.status_code, 400, "A bad request with empty spaces should result in a 400")
+    
     def test_no_results(self):
         r = search("Never mind me lalala")
         self.assertEqual([], r.json(), "No search results should be empty")
@@ -117,14 +121,6 @@ class TestSearch(unittest.TestCase):
             "Title search should be insensitive",
         )
 
-    def test_title_case_insensitive(self):
-        r = search("PICARD FACT")
-        self.assertEqual(
-            [{"id": 8, "title": "Not Picard! Not anyone, in fact", "content": []}],
-            r.json(),
-            "Title search should be insensitive",
-        )
-
     def test_nested(self):
         r = search("facepalm")
         self.assertCountEqual(
@@ -168,7 +164,7 @@ class TestSearch(unittest.TestCase):
             r.json(),
             "Nested content should be found",
         )
-
+    #this means we need to get content filed - convert it to json and anulyse it first before returning
     def test_type_should_be_excluded(self):
         r = search("random")
         self.assertEqual(
