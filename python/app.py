@@ -13,14 +13,29 @@ DBPATH = "../database.db"
 def messages_route():
     """
     Return all the messages
+    curl -d -H "Content-Type: application/json" -X GET http://localhost:5000/messages
     """
 
     with sqlite3.connect(DBPATH) as conn:
+        #def execute(self, sql: str, parameters: Iterable = ...) -> Cursor: ...
+        # -> indicates function annotation and in this case it means the type of a return value
+        # class Cursor(Iterator[Any]):  
+        #   arraysize = ...  # type: Any
+        #   connection = ...  # type: Any
+        #   description = ...  # type: Any
+        # ...
+        # when I examined the type of object returned by iterating over sqlite3.Cursor  
+        # got the tuple, which makes sense => executes returns collection of records (tuples)
+        # <class 'tuple'> ('With the {74c695031a554c2ebfdb2ee123c8b4f6|something} link, the 
+        # chain is forged. The {74c695031a554c2ebfdb2ee123c8b4f6|} speech censured, the 
+        # {74c695031a554c2ebfdb2ee123c8b4f6|} thought forbidden, the {74c695031a554c2ebfdb2ee123c8b4f6|} 
+        # freedom denied - chains us all irrevocably. ',)       //NOTICE ', tuple with one item always have , at the end 
+        # so m[0] gets first and only item in the tuple
         messages_res = conn.execute("select body from messages")
         messages = [m[0] for m in messages_res]
         
         # find default values for all state id's
-        stateIdDefaultDic = getStateIdDefaultDic(messages)
+        state_id_default_dic = get_state_id_default_dic(messages)
        
         # Note: Below getStateIdDbValues queries state table only once! My initial implementation contained
         # separate query for every state id found in the returned messages which can be
@@ -31,65 +46,71 @@ def messages_route():
         # break down query into multiple managable set of ids (bulk of few hundred or thousand at the time)
 
         # find db values for all state id's
-        stateIdDbDic = getStateIdDbValues(stateIdDefaultDic.keys())
+        state_id_db_dic = get_state_id_db_values(state_id_default_dic.keys())
         
         # update mesages with id db or default values    
-        updatedMsgs = map(lambda i: updateMessageVariables(i,stateIdDefaultDic, stateIdDbDic), messages)
+        updated_msgs = map(lambda i: update_message_variables(i,state_id_default_dic, state_id_db_dic), messages)
 
-    return jsonify(list(updatedMsgs)), 200
+    return jsonify(list(updated_msgs)), 200
 
-
-def updateMessageVariables(msg, stateIdDefaultDic, stateIdDbDic):
+#
+def update_message_variables(msg, state_id_default_dic, state_id_db_dic):
     """
     Updates message with db value or default value if none found in db
     """
     matches = re.findall(r'{(.*?)}', msg)
     for match in matches:
-        matchStrings = match.split("|")
-        id = matchStrings[0]
-        defaultVal, dbValue = stateIdDefaultDic.get(id), stateIdDbDic.get(id)
+        match_strings = match.split("|")
+        id = match_strings[0]
+        default_val, db_value = state_id_default_dic.get(id), state_id_db_dic.get(id)
         #use dbValue if exist otherwise defaultVal
-        newValue = defaultVal if not dbValue else dbValue
+        new_value = default_val if not db_value else db_value
         # replace match with new value
-        msg = msg.replace(match, newValue)
+        msg = msg.replace(match, new_value)
         
     # replace all braces { } in the msg
     msg = msg.replace("{","").replace("}","")
 
     return msg
 
-def getStateIdDefaultDic(messages):
+def get_state_id_default_dic(messages):
     """
     Returns dictionary of ids and default values found in messages. 
     Some id may not have any default value.
     """
-    idDefaultDic = {}
+    id_default_dic = {}
     for message in messages:
     # find all strings in between braces {} and for each
     # match split the string by "|" . First part is id and second is default value. Place id and defaultValue in idDefaultDic
-        matches = re.findall(r'{(.*?)}', message)
+        matches = re.findall(r'{(.*?)}', message) #r means treat next as raw string -do not escape any char
         for match in matches:
-            matchStrings = match.split("|")
-            id, defaultValue = matchStrings
-            idDefaultDic[id] = defaultValue
+            match_strings = match.split("|")
+            id, default_value = match_strings
+            id_default_dic[id] = default_value
         
-    return idDefaultDic
+    return id_default_dic
 
 
-def getStateIdDbValues(ids):
+def get_state_id_db_values(ids):
     """
     Returns dictionary of id and db value pairs from the state table.
     Note: If id not found in db returned dictionary will not have the key for it.
     """
-    idValueDic = {}
+    id_value_dic = {}
     with sqlite3.connect(DBPATH) as conn:
+        #formating string in python using C format style (%s and % https://realpython.com/python-string-formatting/
         query = "select id, value from state where id in (%s)" % ','.join('?' * len(ids))
+        #print(query)
+        #select id, value from state where id in (?,?,?,?,?,?)
+        
+        #From https://docs.python.org/2/library/sqlite3.html
+        #Put ? as a placeholder wherever you want to use a value, and then provide a tuple of values as the second argument to the cursor’s execute() method.
         res = conn.execute(query, tuple(ids))
 
-        for idVal in res:
-            idValueDic[idVal[0]] = idVal[1]
+        for id_val in res:
+            id_value_dic[id_val[0]] = id_val[1]
         
-    return idValueDic
+    return id_value_dic
 
 
 @app.route("/search", methods=["POST"])
@@ -114,31 +135,32 @@ def search_route():
         # there is no reason to look for all query items in a single query
         # but execute single query with any of the query items and then check/validate if result contains
         # other query items.
-        queryItems = query.split()
-        firstQueryItem = queryItems[0]
+        query_items = query.split()
+        first_query_item = query_items[0]
         res = conn.execute("select answers.id, answers.title, blocks.content \
                         from answers inner join blocks on answers.id = blocks.answer_id \
-                        where title like ? or content like ?", [f"%{firstQueryItem}%", f"%{firstQueryItem}%"])
+                        where title like ? or content like ?", [f"%{first_query_item}%", f"%{first_query_item}%"])
+        #use of f"string{var}" -formating -http://zetcode.com/python/fstring/#:~:text=It%20uses%20the%20%25%20operator%20and,as%20%25s%20and%20%25d%20.&text=Since%20Python%203.0%2C%20the%20format,to%20provide%20advance%20formatting%20options.&text=Python%20f%2Dstrings%20are%20available,uses%20%7B%7D%20to%20evaluate%20variables.
         answers = [{"id": r[0], "title": r[1],"content": json.loads(r[2])} for r in res]
-
-        filteredAnswers = list(filter(lambda x: containsAllQueryItems(x, queryItems), answers))
+        #filter ansers with filter(function, iterable) where function can be lambda func that check the condition we want
+        filtered_answers = list(filter(lambda x: contains_all_query_items(x, query_items), answers))
 
         print("query string --->", query)
-        pprint(filteredAnswers)
-        return jsonify(filteredAnswers), 200
+        pprint(filtered_answers)
+        return jsonify(filtered_answers), 200
 
 
-def containsAllQueryItems(answer, queryItems):
+def contains_all_query_items(answer, query_items):
     """
     Checks if answer contains all queryItems at any of the level or the answer object
     It returns true if each of the items in queryItems is found at some level of the answer object
     """
     rc = True
-    for queryItem in queryItems:
+    for query_item in query_items:
         # check if queryItem matches title first
-        if queryItem.lower() in answer['title'].lower():
+        if query_item.lower() in answer['title'].lower():
             continue
-        elif hasQueryItem(answer['content'], queryItem):
+        elif has_query_item(answer['content'], query_item):
             continue
         else:
             rc = False
@@ -147,7 +169,7 @@ def containsAllQueryItems(answer, queryItems):
     return rc
 
 
-def hasQueryItem(obj, queryItem):
+def has_query_item(obj, query_item):
     """
     Performs traversal of the passed in obj until we reach object of the string type and 
     checks if it matches queryItem.
@@ -155,19 +177,19 @@ def hasQueryItem(obj, queryItem):
     """
     found = False
     if isinstance(obj, str):
-        if queryItem.lower() in obj.lower():
+        if query_item.lower() in obj.lower():
             return True
 
     if isinstance(obj, dict):
         for k, v in obj.items():
             if k != 'type':
-                if hasQueryItem(v, queryItem):
+                if has_query_item(v, query_item):
                     found = True
                     break
 
     elif isinstance(obj, list):
         for elem in obj:
-            if hasQueryItem(elem, queryItem):
+            if has_query_item(elem, query_item):
                 found = True
                 break
 
