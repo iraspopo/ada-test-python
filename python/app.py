@@ -37,7 +37,7 @@ def messages_route():
         # find default values for all state id's
         state_id_default_dic = get_state_id_default_dic(messages)
        
-        # Note: Below getStateIdDbValues queries state table only once! My initial implementation contained
+        # Note: Below get_state_id_db_values queries state table only once! My initial implementation contained
         # separate query for every state id found in the returned messages which can be
         # costly (longer times), specially if tables are big. Using single query is way faster but still
         # could cause potential problems when large number of ids are present in the query. 
@@ -63,7 +63,7 @@ def update_message_variables(msg, state_id_default_dic, state_id_db_dic):
         match_strings = match.split("|")
         id = match_strings[0]
         default_val, db_value = state_id_default_dic.get(id), state_id_db_dic.get(id)
-        #use dbValue if exist otherwise defaultVal
+        #use db_value if exist otherwise default_val
         new_value = default_val if not db_value else db_value
         # replace match with new value
         msg = msg.replace(match, new_value)
@@ -81,7 +81,7 @@ def get_state_id_default_dic(messages):
     id_default_dic = {}
     for message in messages:
     # find all strings in between braces {} and for each
-    # match split the string by "|" . First part is id and second is default value. Place id and defaultValue in idDefaultDic
+    # match split the string by "|" . First part is id and second is default value. Place id and default_value in id_default_dic
         matches = re.findall(r'{(.*?)}', message) #r means treat next as raw string -do not escape any char
         for match in matches:
             match_strings = match.split("|")
@@ -129,7 +129,7 @@ def search_route():
         if not query or not query.strip():
             return jsonify({'status': 'FAILURE', 'message': 'Bad Request'}), 400
 
-        # Answer must have all queryItems matched at some level.
+        # Answer must have all query_items matched at some level.
         # It is hard and also expensive (believe me I tried) to execute sql query/ies
         # that would return appropriate content. It occurred to me that
         # there is no reason to look for all query items in a single query
@@ -157,7 +157,7 @@ def contains_all_query_items(answer, query_items):
     """
     rc = True
     for query_item in query_items:
-        # check if queryItem matches title first
+        # check if query_item matches title first
         if query_item.lower() in answer['title'].lower():
             continue
         elif has_query_item(answer['content'], query_item):
@@ -172,7 +172,7 @@ def contains_all_query_items(answer, query_items):
 def has_query_item(obj, query_item):
     """
     Performs traversal of the passed in obj until we reach object of the string type and 
-    checks if it matches queryItem.
+    checks if it matches query_item.
     Object with (key)attribute 'type' are ignored as per requirement 
     """
     found = False
